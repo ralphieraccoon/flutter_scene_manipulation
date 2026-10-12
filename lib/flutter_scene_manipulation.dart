@@ -7,6 +7,28 @@ import 'package:vector_math/vector_math.dart' as vm;
 
 enum ManipulationAxis { x, y, z }
 
+enum ManipulationOptions { translatable, rotatable, scalable, freedrag }
+
+class ManipulationIcons {
+  ManipulationIcons._();
+
+  static const _kFontFam = 'ManipulationIcons';
+  static const String? _kFontPkg = null;
+
+  static const IconData rotateicon = IconData(0xe800, fontFamily: _kFontFam, fontPackage: _kFontPkg);
+  static const IconData scaleicon = IconData(0xe801, fontFamily: _kFontFam, fontPackage: _kFontPkg);
+  static const IconData translateicon = IconData(0xe802, fontFamily: _kFontFam, fontPackage: _kFontPkg);
+}
+
+
+base class ManipulatableNode extends scene.Node {
+  Set<ManipulationOptions> manipulationOptions = {};
+
+  ManipulatableNode({Set<ManipulationOptions>? options}) : super() {
+    manipulationOptions = options!;
+  }
+}
+
 abstract base class Gizmo extends scene.Node {
   final GizmoStyle style;
   late final scene.Node xAxis;
@@ -202,7 +224,11 @@ base class ScaleGizmo extends Gizmo {
     scene.Node tip = scene.Node(
       mesh: scene.Mesh(
         scene.CuboidGeometry(
-          vm.Vector3(super.gizmoScale / 6, super.gizmoScale / 6, super.gizmoScale / 6)
+          vm.Vector3(
+            super.gizmoScale / 6,
+            super.gizmoScale / 6,
+            super.gizmoScale / 6,
+          ),
         ),
         material,
       ),
