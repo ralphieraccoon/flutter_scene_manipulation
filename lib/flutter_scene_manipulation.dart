@@ -15,19 +15,171 @@ class ManipulationIcons {
   static const _kFontFam = 'ManipulationIcons';
   static const String? _kFontPkg = null;
 
-  static const IconData rotateicon = IconData(0xe800, fontFamily: _kFontFam, fontPackage: _kFontPkg);
-  static const IconData scaleicon = IconData(0xe801, fontFamily: _kFontFam, fontPackage: _kFontPkg);
-  static const IconData translateicon = IconData(0xe802, fontFamily: _kFontFam, fontPackage: _kFontPkg);
+  static const IconData rotateicon = IconData(
+    0xe800,
+    fontFamily: _kFontFam,
+    fontPackage: _kFontPkg,
+  );
+  static const IconData scaleicon = IconData(
+    0xe801,
+    fontFamily: _kFontFam,
+    fontPackage: _kFontPkg,
+  );
+  static const IconData translateicon = IconData(
+    0xe802,
+    fontFamily: _kFontFam,
+    fontPackage: _kFontPkg,
+  );
 }
-
 
 base class ManipulatableNode extends scene.Node {
   Set<ManipulationOptions> manipulationOptions = {};
 
   ManipulatableNode({Set<ManipulationOptions>? options}) : super() {
     manipulationOptions = options!;
+
+    addAll([
+      TranslationGizmo("${name}_translation_gizmo")..visible = false,
+      RotationGizmo("${name}_translation_gizmo")..visible = false,
+      ScaleGizmo("${name}_translation_gizmo")..visible = false,
+    ]);
+  }
+
+  void toggleManipulation(ManipulationOptions option) {
+    if (manipulationOptions.contains(option)) {
+      switch (option) {
+        case ManipulationOptions.translatable:
+          getChildByName("${name}_translation_gizmo")!
+              .visible = !getChildByName("${name}_translation_gizmo")!
+              .visible;
+          getChildByName("${name}_rotation_gizmo")!.visible = false;
+          getChildByName("${name}_scale_gizmo")!.visible = false;
+        case ManipulationOptions.rotatable:
+          getChildByName("${name}_translation_gizmo")!.visible = false;
+          getChildByName("${name}_rotation_gizmo")!
+              .visible = !getChildByName("${name}_rotation_gizmo")!
+              .visible;
+          getChildByName("${name}_scale_gizmo")!.visible = false;
+        case ManipulationOptions.scalable:
+          getChildByName("${name}_translation_gizmo")!.visible = false;
+          getChildByName("${name}_rotation_gizmo")!.visible = false;
+          getChildByName("${name}_scale_gizmo")!
+              .visible = !getChildByName("${name}_scale_gizmo")!
+              .visible;
+        default:
+      }
+    }
   }
 }
+
+class ManipulatableView extends StatefulWidget {
+  final scene.Camera camera;
+  final BoxConstraints constraints;
+  final scene.SceneView child;
+
+  const ManipulatableView({
+    super.key,
+    required this.camera,
+    required this.constraints,
+    required this.child,
+  });
+
+  @override
+  State<ManipulatableView> createState() => _ManipulatableViewState();
+}
+
+class _ManipulatableViewState extends State<ManipulatableView> {
+  late scene.Node activeNode_;
+  ManipulationOptions currentOption_ = ManipulationOptions.translatable;
+
+  void setManipulationOption(ManipulationOptions option) =>
+      currentOption_ = option;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (details) {
+        final ray = widget.camera.screenPointToRay(
+          details.localPosition,
+          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+        );
+
+        final hit = widget.child.scene!.raycast(ray);
+
+        if (hit != null && hit.node is ManipulatableNode) {
+          activeNode_ = hit.node;
+          (activeNode_ as ManipulatableNode).toggleManipulation(currentOption_);
+        }
+      },
+      // onPanStart: (details) {
+
+      //   final ray = widget.camera.screenPointToRay(
+      //     details.localPosition,
+      //     Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+      //   );
+
+      //   final hit = widget.child.scene!.raycast(ray);
+
+      // },
+      onPanUpdate: (details) {
+        final currRay = widget.camera.screenPointToRay(
+          details.localPosition,
+          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+        );
+
+        final prevRay = widget.camera.screenPointToRay(
+          details.localPosition - details.delta,
+          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+        );
+        final hit = widget.child.scene!.raycast(currRay);
+
+        if (hit != null) {
+          if (hit.node.parent!.name.contains("gizmo")) {
+            if (hit.node.parent!.name.contains("translation_gizmo")) {
+              if (hit.node.name.endsWith("_x")) {
+                vm.Vector3 currLocation =
+                    currRay.origin +
+                    (currRay.direction *
+                        (-currRay.origin.z / currRay.direction.z));
+                vm.Vector3 prevLocation =
+                    prevRay.origin +
+                    (prevRay.direction *
+                        (-prevRay.origin.z / prevRay.direction.z));
+
+                (hit.node.parent! as Gizmo).manipulate(
+                  ManipulationAxis.x,
+                  atan2(
+                    currLocation.cross(prevLocation).z,
+                    currLocation.dot(prevLocation),
+                  ),
+                );
+              }
+            }
+          }
+        }
+      },
+      child: widget.child,
+    );
+  }
+}
+
+// @override
+// GestureDragStartCallback? get onPanStart {
+//   super.onPanStart;
+//   return (details) {
+
+// }
+
+// @override
+// GestureDragUpdateCallback? get onPanUpdate {
+//   super.onPanUpdate;
+//   return (details) {};
+// }
 
 abstract base class Gizmo extends scene.Node {
   final GizmoStyle style;
@@ -53,7 +205,7 @@ abstract base class Gizmo extends scene.Node {
     addAll([xAxis, yAxis, zAxis]);
   }
 
-  void manipulate(ManipulationAxis axis);
+  void manipulate(ManipulationAxis axis, double delta);
 }
 
 class GizmoStyle {
@@ -130,14 +282,14 @@ class GizmoStyle {
 
 base class TranslationGizmo extends Gizmo {
   TranslationGizmo(super.name) {
-    xAxis = _createArrow(super.gizmoScale, style.xMaterial);
-    yAxis = _createArrow(super.gizmoScale, style.yMaterial);
-    zAxis = _createArrow(super.gizmoScale, style.zMaterial);
+    xAxis = _createArrow("${name}_x", super.gizmoScale, style.xMaterial);
+    yAxis = _createArrow("${name}_y", super.gizmoScale, style.yMaterial);
+    zAxis = _createArrow("${name}_z", super.gizmoScale, style.zMaterial);
 
     _initGizmoNodes();
   }
 
-  scene.Node _createArrow(double scale, scene.Material material) {
+  scene.Node _createArrow(String name, double scale, scene.Material material) {
     scene.Node shaft = scene.Node(
       mesh: scene.Mesh(
         scene.CylinderGeometry(
@@ -159,13 +311,21 @@ base class TranslationGizmo extends Gizmo {
       ),
     )..raycastable = false;
 
-    return scene.Node()..addAll([shaft, tip]);
+    return scene.Node(name: name)..addAll([shaft, tip]);
   }
 
   @override
-  manipulate(ManipulationAxis axis) {
-    // TODO: implement manipulate
-    throw UnimplementedError();
+  manipulate(ManipulationAxis axis, double delta) {
+    mutateLocalTransform((matrix) {
+      switch (axis) {
+        case ManipulationAxis.x:
+          matrix.translateByVector3(vm.Vector3(delta, 0, 0));
+        case ManipulationAxis.y:
+          matrix.translateByVector3(vm.Vector3(0, delta, 0));
+        case ManipulationAxis.z:
+          matrix.translateByVector3(vm.Vector3(0, 0, delta));
+      }
+    });
   }
 }
 
@@ -196,21 +356,30 @@ base class RotationGizmo extends Gizmo {
   }
 
   @override
-  void manipulate(ManipulationAxis axis) {
-    // TODO: implement manipulate
+  void manipulate(ManipulationAxis axis, double delta) {
+    mutateLocalTransform((matrix) {
+      switch (axis) {
+        case ManipulationAxis.x:
+          matrix.rotateX(delta);
+        case ManipulationAxis.y:
+          matrix.rotateY(delta);
+        case ManipulationAxis.z:
+          matrix.rotateZ(delta);
+      }
+    });
   }
 }
 
 base class ScaleGizmo extends Gizmo {
   ScaleGizmo(super.name) {
-    xAxis = _createArrow(super.gizmoScale, style.xMaterial);
-    yAxis = _createArrow(super.gizmoScale, style.yMaterial);
-    zAxis = _createArrow(super.gizmoScale, style.zMaterial);
+    xAxis = _createArrow("${name}_x", super.gizmoScale, style.xMaterial);
+    yAxis = _createArrow("${name}_y", super.gizmoScale, style.yMaterial);
+    zAxis = _createArrow("${name}_z", super.gizmoScale, style.zMaterial);
 
     _initGizmoNodes();
   }
 
-  scene.Node _createArrow(double scale, scene.Material material) {
+  scene.Node _createArrow(String name, double scale, scene.Material material) {
     scene.Node shaft = scene.Node(
       mesh: scene.Mesh(
         scene.CylinderGeometry(
@@ -234,12 +403,20 @@ base class ScaleGizmo extends Gizmo {
       ),
     )..raycastable = false;
 
-    return scene.Node()..addAll([shaft, tip]);
+    return scene.Node(name: name)..addAll([shaft, tip]);
   }
 
   @override
-  manipulate(ManipulationAxis axis) {
-    // TODO: implement manipulate
-    throw UnimplementedError();
+  manipulate(ManipulationAxis axis, Offset delta) {
+    mutateLocalTransform((matrix) {
+      switch (axis) {
+        case ManipulationAxis.x:
+          matrix.scaleByVector3(vm.Vector3(delta, 0, 0));
+        case ManipulationAxis.y:
+          matrix.scaleByVector3(vm.Vector3(0, delta, 0));
+        case ManipulationAxis.z:
+          matrix.scaleByVector3(vm.Vector3(0, 0, delta));
+      }
+    });
   }
 }
