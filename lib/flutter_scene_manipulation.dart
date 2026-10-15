@@ -140,25 +140,54 @@ class _ManipulatableViewState extends State<ManipulatableView> {
 
         if (hit != null) {
           if (hit.node.parent!.name.contains("gizmo")) {
-            if (hit.node.parent!.name.contains("translation_gizmo")) {
-              if (hit.node.name.endsWith("_x")) {
-                vm.Vector3 currLocation =
-                    currRay.origin +
-                    (currRay.direction *
-                        (-currRay.origin.z / currRay.direction.z));
-                vm.Vector3 prevLocation =
-                    prevRay.origin +
-                    (prevRay.direction *
-                        (-prevRay.origin.z / prevRay.direction.z));
+            ManipulationAxis axis;
 
-                (hit.node.parent! as Gizmo).manipulate(
-                  ManipulationAxis.x,
-                  atan2(
-                    currLocation.cross(prevLocation).z,
-                    currLocation.dot(prevLocation),
-                  ),
-                );
-              }
+            if (hit.node.name.endsWith("_x")) {
+              axis = ManipulationAxis.x;
+            } else if (hit.node.name.endsWith("_y")) {
+              axis = ManipulationAxis.y;
+            } else {
+              axis = ManipulationAxis.z;
+            }
+
+            vm.Vector3 currLocation =
+                currRay.origin +
+                (currRay.direction *
+                    switch (axis) {
+                      ManipulationAxis.x =>
+                        (-currRay.origin.x / currRay.direction.x),
+                      ManipulationAxis.y =>
+                        (-currRay.origin.y / currRay.direction.y),
+                      ManipulationAxis.z =>
+                        (-currRay.origin.z / currRay.direction.z),
+                    });
+            vm.Vector3 prevLocation =
+                prevRay.origin +
+                (prevRay.direction *
+                    switch (axis) {
+                      ManipulationAxis.x =>
+                        (-prevRay.origin.x / prevRay.direction.x),
+                      ManipulationAxis.y =>
+                        (-prevRay.origin.y / prevRay.direction.y),
+                      ManipulationAxis.z =>
+                        (-prevRay.origin.z / prevRay.direction.z),
+                    });
+
+            if (hit.node.parent!.name.contains("rotation_gizmo")) {
+              (hit.node.parent! as RotationGizmo).manipulate(
+                axis,
+                atan2(switch (axis) {
+                  ManipulationAxis.x => currLocation.cross(prevLocation).x,
+                  ManipulationAxis.y => currLocation.cross(prevLocation).y,
+                  ManipulationAxis.z => currLocation.cross(prevLocation).z,
+                }, currLocation.dot(prevLocation)),
+              );
+            } else {
+              (hit.node.parent! as Gizmo).manipulate(axis, switch (axis) {
+                ManipulationAxis.x => (currLocation.x - prevLocation.x),
+                ManipulationAxis.y => (currLocation.y - prevLocation.y),
+                ManipulationAxis.z => (currLocation.z - prevLocation.z),
+              });
             }
           }
         }
