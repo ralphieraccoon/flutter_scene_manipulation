@@ -45,7 +45,7 @@ base class ManipulatableNode extends scene.Node {
 
     addAll([
       TranslationGizmo("${name}_translation_gizmo")..visible = false,
-      RotationGizmo("${name}_rotaion_gizmo")..visible = false,
+      RotationGizmo("${name}_rotation_gizmo")..visible = false,
       ScaleGizmo("${name}_scale_gizmo")..visible = false,
     ]);
   }
@@ -95,7 +95,7 @@ class ManipulatableView extends StatefulWidget {
 
 class _ManipulatableViewState extends State<ManipulatableView> {
   late scene.Node activeNode_;
-  ManipulationOptions currentOption_ = ManipulationOptions.translatable;
+  ManipulationOptions currentOption_ = ManipulationOptions.rotatable;
 
   void setManipulationOption(ManipulationOptions option) =>
       currentOption_ = option;
@@ -403,22 +403,22 @@ base class RotationGizmo extends Gizmo {
   RotationGizmo(super.name, {super.scale, super.style}) {
     scene.TorusGeometry ring = scene.TorusGeometry(
       radius: super.gizmoScale,
-      tubeRadius: 0.1,
+      tubeRadius: 0.01,
     );
 
     xAxis = scene.Node(
       name: "${name}_x",
-      localTransform: vm.Matrix4.rotationX(pi / 2),
+      localTransform: vm.Matrix4.rotationZ(pi / 2),
       mesh: scene.Mesh(ring, style.xMaterial),
     );
     yAxis = scene.Node(
       name: "${name}_y",
-      localTransform: vm.Matrix4.rotationY(pi / 2),
+      // localTransform: vm.Matrix4.identity(),
       mesh: scene.Mesh(ring, style.yMaterial),
     );
     zAxis = scene.Node(
       name: "${name}_z",
-      localTransform: vm.Matrix4.rotationZ(pi / 2),
+      localTransform: vm.Matrix4.rotationX(pi / 2),
       mesh: scene.Mesh(ring, style.zMaterial),
     );
 
@@ -432,7 +432,7 @@ base class RotationGizmo extends Gizmo {
         case ManipulationAxis.x:
           matrix.rotateX(delta);
         case ManipulationAxis.y:
-          matrix.rotateY(delta);
+          matrix.rotateY(-delta);
         case ManipulationAxis.z:
           matrix.rotateZ(delta);
       }
@@ -442,23 +442,46 @@ base class RotationGizmo extends Gizmo {
 
 base class ScaleGizmo extends Gizmo {
   ScaleGizmo(super.name, {super.scale, super.style}) {
-    xAxis = _createArrow("${name}_x", super.gizmoScale, style.xMaterial);
-    yAxis = _createArrow("${name}_y", super.gizmoScale, style.yMaterial);
-    zAxis = _createArrow("${name}_z", super.gizmoScale, style.zMaterial);
+    xAxis = _createArrow(
+      "${name}_x",
+      vm.Matrix4.rotationZ(pi / 2),
+      super.gizmoScale,
+      style.xMaterial,
+    );
+    yAxis = _createArrow(
+      "${name}_y",
+      vm.Matrix4.identity(),
+      super.gizmoScale,
+      style.yMaterial,
+    );
+    zAxis = _createArrow(
+      "${name}_z",
+      vm.Matrix4.rotationX(pi / 2),
+      super.gizmoScale,
+      style.zMaterial,
+    );
 
     _initGizmoNodes();
   }
 
-  scene.Node _createArrow(String name, double scale, scene.Material material) {
+  scene.Node _createArrow(
+    String name,
+    vm.Matrix4 transform,
+    double scale,
+    scene.Material material,
+  ) {
     scene.Node shaft = scene.Node(
       name: "${name}_shaft",
       mesh: scene.Mesh(
         scene.CylinderGeometry(
           height: super.gizmoScale,
-          topRadius: 0.1,
-          bottomRadius: 0.1,
+          topRadius: 0.01,
+          bottomRadius: 0.01,
         ),
         material,
+      ),
+      localTransform: vm.Matrix4.translation(
+        vm.Vector3(0.0, super.gizmoScale / 2, 0.0),
       ),
     );
     scene.Node tip = scene.Node(
@@ -473,9 +496,13 @@ base class ScaleGizmo extends Gizmo {
         ),
         material,
       ),
+      localTransform: vm.Matrix4.translation(
+        vm.Vector3(0.0, super.gizmoScale, 0.0),
+      ),
     );
 
-    return scene.Node(name: name)..addAll([shaft, tip]);
+    return scene.Node(name: name, localTransform: transform)
+      ..addAll([shaft, tip]);
   }
 
   @override
@@ -483,11 +510,11 @@ base class ScaleGizmo extends Gizmo {
     parent?.mutateLocalTransform((matrix) {
       switch (axis) {
         case ManipulationAxis.x:
-          matrix.scaleByVector3(vm.Vector3(delta, 0, 0));
+          matrix.scaleByVector3(vm.Vector3(delta, 1.0, 1.0));
         case ManipulationAxis.y:
-          matrix.scaleByVector3(vm.Vector3(0, delta, 0));
+          matrix.scaleByVector3(vm.Vector3(1.0, delta, 1.0));
         case ManipulationAxis.z:
-          matrix.scaleByVector3(vm.Vector3(0, 0, delta));
+          matrix.scaleByVector3(vm.Vector3(1.0, 1.0, delta));
       }
     });
   }

@@ -29,7 +29,7 @@ class _CubeViewState extends State<CubeView> {
     super.initState();
       scene.add(
         ManipulatableNode(
-          options: {ManipulationOptions.translatable},
+          options: {ManipulationOptions.scalable, ManipulationOptions.rotatable, ManipulationOptions.translatable},
           mesh: Mesh(
             CuboidGeometry(vm.Vector3(0.1, 0.1, 0.1)),
             PhysicallyBasedMaterial(),
