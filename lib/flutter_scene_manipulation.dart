@@ -105,6 +105,13 @@ class _ManipulatableViewState extends State<ManipulatableView> {
     super.initState();
   }
 
+  vm.Vector3 rayAxisHit(vm.Ray ray, vm.Vector3 axis) {
+    final n = ray.direction - axis * ray.direction.dot(axis);
+    final d = ray.direction.dot(n);
+    final t = d.abs() < 1e-6 ? 0.0 : -ray.origin.dot(n) / d;
+    return ray.origin + ray.direction * t;
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -144,7 +151,6 @@ class _ManipulatableViewState extends State<ManipulatableView> {
         final hit = widget.child.scene!.raycast(currRay);
 
         if (hit != null) {
-
           scene.Node hitNode;
 
           if (hit.node.parent!.name.contains("gizmo") ||
@@ -166,45 +172,33 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               axis = ManipulationAxis.z;
             }
 
-            vm.Vector3 currLocation =
-                currRay.origin +
-                (currRay.direction *
-                    switch (axis) {
-                      ManipulationAxis.x =>
-                        (-currRay.origin.x / currRay.direction.x),
-                      ManipulationAxis.y =>
-                        (-currRay.origin.y / currRay.direction.y),
-                      ManipulationAxis.z =>
-                        (-currRay.origin.z / currRay.direction.z),
-                    });
-            vm.Vector3 prevLocation =
-                prevRay.origin +
-                (prevRay.direction *
-                    switch (axis) {
-                      ManipulationAxis.x =>
-                        (-prevRay.origin.x / prevRay.direction.x),
-                      ManipulationAxis.y =>
-                        (-prevRay.origin.y / prevRay.direction.y),
-                      ManipulationAxis.z =>
-                        (-prevRay.origin.z / prevRay.direction.z),
-                    });
+            print(axis);
+
+            final axisVec = switch (axis) {
+              ManipulationAxis.x => vm.Vector3(1, 0, 0),
+              ManipulationAxis.y => vm.Vector3(0, 1, 0),
+              ManipulationAxis.z => vm.Vector3(0, 0, 1),
+            };
+
+            final currLocation = rayAxisHit(currRay, axisVec);
+            final prevLocation = rayAxisHit(prevRay, axisVec);
 
             if (hitNode.parent!.name.contains("rotation_gizmo")) {
               (hitNode.parent! as RotationGizmo).manipulate(
                 axis,
-                atan2(switch (axis) {
-                  ManipulationAxis.x => currLocation.cross(prevLocation).x,
-                  ManipulationAxis.y => currLocation.cross(prevLocation).y,
-                  ManipulationAxis.z => currLocation.cross(prevLocation).z,
-                }, currLocation.dot(prevLocation)),
+                atan2(
+                  currLocation.cross(prevLocation).dot(axisVec),
+                  currLocation.dot(prevLocation),
+                ),
               );
             } else {
-              print("manipulating $currLocation $prevLocation ${currLocation.x - prevLocation.x} ${currLocation.y - prevLocation.y} ${currLocation.z - prevLocation.z}");
-              (hitNode.parent! as Gizmo).manipulate(axis, switch (axis) {
-                ManipulationAxis.x => (currLocation.x - prevLocation.x),
-                ManipulationAxis.y => (currLocation.y - prevLocation.y),
-                ManipulationAxis.z => (currLocation.z - prevLocation.z),
-              });
+              print(
+                "manipulating $currLocation $prevLocation ${currLocation.x - prevLocation.x} ${currLocation.y - prevLocation.y} ${currLocation.z - prevLocation.z}",
+              );
+              (hitNode.parent! as Gizmo).manipulate(
+                axis,
+                (currLocation - prevLocation).dot(axisVec),
+              );
             }
           }
         }
@@ -331,7 +325,7 @@ base class TranslationGizmo extends Gizmo {
   TranslationGizmo(super.name, {super.scale, super.style}) {
     xAxis = _createArrow(
       "${name}_x",
-      vm.Matrix4.rotationX(pi / 2),
+      vm.Matrix4.rotationZ(pi / 2),
       super.gizmoScale,
       style.xMaterial,
     );
@@ -343,7 +337,7 @@ base class TranslationGizmo extends Gizmo {
     );
     zAxis = _createArrow(
       "${name}_z",
-      vm.Matrix4.rotationZ(pi / 2),
+      vm.Matrix4.rotationX(pi / 2),
       super.gizmoScale,
       style.zMaterial,
     );
