@@ -41,9 +41,12 @@ base class ManipulatableNode extends scene.Node {
     super.mesh,
     super.localTransform,
   }) {
+    scene.Node meshNode = scene.Node(name: "${name}_mesh", mesh: mesh);
     manipulationOptions = options!;
+    mesh = null;
 
     addAll([
+      meshNode,
       TranslationGizmo("${name}_translation_gizmo")..visible = false,
       RotationGizmo("${name}_rotation_gizmo")..visible = false,
       ScaleGizmo("${name}_scale_gizmo")..visible = false,
@@ -96,6 +99,7 @@ class ManipulatableView extends StatefulWidget {
 class _ManipulatableViewState extends State<ManipulatableView> {
   late scene.Node activeNode_;
   ManipulationOptions currentOption_ = ManipulationOptions.rotatable;
+  late ManipulationAxis currentAxis_;
 
   void setManipulationOption(ManipulationOptions option) =>
       currentOption_ = option;
@@ -123,32 +127,18 @@ class _ManipulatableViewState extends State<ManipulatableView> {
 
         final hit = widget.child.scene?.raycast(ray);
 
-        if (hit != null && hit.node is ManipulatableNode) {
-          activeNode_ = hit.node;
+        if (hit != null && hit.node.parent is ManipulatableNode) {
+          activeNode_ = hit.node.parent!;
           (activeNode_ as ManipulatableNode).toggleManipulation(currentOption_);
         }
       },
-      // onPanStart: (details) {
-
-      //   final ray = widget.camera.screenPointToRay(
-      //     details.localPosition,
-      //     Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
-      //   );
-
-      //   final hit = widget.child.scene!.raycast(ray);
-
-      // },
-      onPanUpdate: (details) {
-        final currRay = widget.camera.screenPointToRay(
+      onPanStart: (details) {
+        final ray = widget.camera.screenPointToRay(
           details.localPosition,
           Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
         );
 
-        final prevRay = widget.camera.screenPointToRay(
-          details.localPosition - details.delta,
-          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
-        );
-        final hit = widget.child.scene!.raycast(currRay);
+        final hit = widget.child.scene!.raycast(ray);
 
         if (hit != null) {
           scene.Node hitNode;
@@ -162,45 +152,89 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               hitNode = hit.node;
             }
 
-            ManipulationAxis axis;
-
             if (hitNode.name.endsWith("_x")) {
-              axis = ManipulationAxis.x;
+              currentAxis_ = ManipulationAxis.x;
             } else if (hitNode.name.endsWith("_y")) {
-              axis = ManipulationAxis.y;
+              currentAxis_ = ManipulationAxis.y;
             } else {
-              axis = ManipulationAxis.z;
-            }
-
-            print(axis);
-
-            final axisVec = switch (axis) {
-              ManipulationAxis.x => vm.Vector3(1, 0, 0),
-              ManipulationAxis.y => vm.Vector3(0, 1, 0),
-              ManipulationAxis.z => vm.Vector3(0, 0, 1),
-            };
-
-            final currLocation = rayAxisHit(currRay, axisVec);
-            final prevLocation = rayAxisHit(prevRay, axisVec);
-
-            if (hitNode.parent!.name.contains("rotation_gizmo")) {
-              (hitNode.parent! as RotationGizmo).manipulate(
-                axis,
-                atan2(
-                  currLocation.cross(prevLocation).dot(axisVec),
-                  currLocation.dot(prevLocation),
-                ),
-              );
-            } else {
-              print(
-                "manipulating $currLocation $prevLocation ${currLocation.x - prevLocation.x} ${currLocation.y - prevLocation.y} ${currLocation.z - prevLocation.z}",
-              );
-              (hitNode.parent! as Gizmo).manipulate(
-                axis,
-                (currLocation - prevLocation).dot(axisVec),
-              );
+              currentAxis_ = ManipulationAxis.z;
             }
           }
+        }
+      },
+      onPanUpdate: (details) {
+        final currRay = widget.camera.screenPointToRay(
+          details.localPosition,
+          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+        );
+
+        final prevRay = widget.camera.screenPointToRay(
+          details.localPosition - details.delta,
+          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+        );
+        // final hit = widget.child.scene!.raycast(currRay);
+
+        // if (hit != null) {
+        //   // scene.Node hitNode;
+
+        //   // if (hit.node.parent!.name.contains("gizmo") ||
+        //   //     hit.node.parent!.parent!.name.contains("gizmo")) {
+        //   //   if (hit.node.name.endsWith("_shaft") ||
+        //   //       hit.node.name.endsWith("_tip")) {
+        //   //     hitNode = hit.node.parent!;
+        //   //   } else {
+        //   //     hitNode = hit.node;
+        //   //   }
+
+        //   //   ManipulationAxis axis;
+
+        //   //   if (hitNode.name.endsWith("_x")) {
+        //   //     axis = ManipulationAxis.x;
+        //   //   } else if (hitNode.name.endsWith("_y")) {
+        //   //     axis = ManipulationAxis.y;
+        //   //   } else {
+        //   //     axis = ManipulationAxis.z;
+        //   //   }
+
+        // print(axis);
+
+        final axisVec = switch (currentAxis_) {
+          ManipulationAxis.x => vm.Vector3(1, 0, 0),
+          ManipulationAxis.y => vm.Vector3(0, 1, 0),
+          ManipulationAxis.z => vm.Vector3(0, 0, 1),
+        };
+
+        final currLocation = rayAxisHit(currRay, axisVec);
+        final prevLocation = rayAxisHit(prevRay, axisVec);
+
+        switch (currentOption_) {
+          case ManipulationOptions.translatable:
+            (activeNode_.getChildByName(
+              "${activeNode_.name}_translation_gizmo",
+            ) as TranslationGizmo).manipulate(
+              currentAxis_,
+              (currLocation - prevLocation).dot(axisVec),
+            );
+          case ManipulationOptions.rotatable:
+            (activeNode_.getChildByName(
+              "${activeNode_.name}_rotation_gizmo",
+            ) as RotationGizmo).manipulate(
+              currentAxis_,
+              atan2(
+                currLocation.cross(prevLocation).dot(axisVec),
+                currLocation.dot(prevLocation),
+              ),
+            );
+          case ManipulationOptions.scalable:
+            (activeNode_.getChildByName(
+              "${activeNode_.name}_scale_gizmo",
+            ) as ScaleGizmo).manipulate(
+              currentAxis_,
+              (currLocation - prevLocation).dot(axisVec),
+            );
+          case ManipulationOptions.freedrag:
+            // TODO: Handle this case.
+            throw UnimplementedError();
         }
       },
       child: widget.child,
@@ -432,9 +466,9 @@ base class RotationGizmo extends Gizmo {
         case ManipulationAxis.x:
           matrix.rotateX(delta);
         case ManipulationAxis.y:
-          matrix.rotateY(-delta);
+          matrix.rotateY(delta);
         case ManipulationAxis.z:
-          matrix.rotateZ(delta);
+          matrix.rotateZ(-delta);
       }
     });
   }
@@ -507,14 +541,14 @@ base class ScaleGizmo extends Gizmo {
 
   @override
   manipulate(ManipulationAxis axis, double delta) {
-    parent?.mutateLocalTransform((matrix) {
+    parent?.getChildByName("${parent?.name}_mesh")?.mutateLocalTransform((matrix) {
       switch (axis) {
         case ManipulationAxis.x:
-          matrix.scaleByVector3(vm.Vector3(delta, 1.0, 1.0));
+          matrix.scaleByVector3(vm.Vector3(1.0 - delta, 1.0, 1.0));
         case ManipulationAxis.y:
-          matrix.scaleByVector3(vm.Vector3(1.0, delta, 1.0));
+          matrix.scaleByVector3(vm.Vector3(1.0, 1.0 + delta, 1.0));
         case ManipulationAxis.z:
-          matrix.scaleByVector3(vm.Vector3(1.0, 1.0, delta));
+          matrix.scaleByVector3(vm.Vector3(1.0, 1.0, 1.0 + delta));
       }
     });
   }

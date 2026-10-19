@@ -1,7 +1,9 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:flutter_scene_manipulation/flutter_scene_manipulation.dart';
@@ -27,16 +29,25 @@ class _CubeViewState extends State<CubeView> {
   @override
   void initState() {
     super.initState();
-      scene.add(
-        ManipulatableNode(
-          options: {ManipulationOptions.scalable, ManipulationOptions.rotatable, ManipulationOptions.translatable},
-          mesh: Mesh(
-            CuboidGeometry(vm.Vector3(0.1, 0.1, 0.1)),
-            PhysicallyBasedMaterial(),
-          ),
+
+    if (kIsWeb) {
+      BrowserContextMenu.disableContextMenu();
+    }
+
+    scene.add(
+      ManipulatableNode(
+        options: {
+          ManipulationOptions.scalable,
+          ManipulationOptions.rotatable,
+          ManipulationOptions.translatable,
+        },
+        mesh: Mesh(
+          CuboidGeometry(vm.Vector3(0.1, 0.1, 0.1)),
+          PhysicallyBasedMaterial(),
         ),
-      );
-      scene.add(camera);
+      ),
+    );
+    scene.add(camera);
   }
 
   @override
