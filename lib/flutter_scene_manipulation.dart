@@ -97,9 +97,9 @@ class ManipulatableView extends StatefulWidget {
 }
 
 class _ManipulatableViewState extends State<ManipulatableView> {
-  late scene.Node activeNode_;
-  ManipulationOptions currentOption_ = ManipulationOptions.rotatable;
-  late ManipulationAxis currentAxis_;
+  scene.Node? activeNode_;
+  ManipulationOptions currentOption_ = ManipulationOptions.freedrag;
+  ManipulationAxis? currentAxis_;
 
   void setManipulationOption(ManipulationOptions option) =>
       currentOption_ = option;
@@ -109,10 +109,16 @@ class _ManipulatableViewState extends State<ManipulatableView> {
     super.initState();
   }
 
-  vm.Vector3 rayAxisHit(vm.Ray ray, vm.Vector3 axis) {
-    final n = ray.direction - axis * ray.direction.dot(axis);
-    final d = ray.direction.dot(n);
-    final t = d.abs() < 1e-6 ? 0.0 : -ray.origin.dot(n) / d;
+  // vm.Vector3 rayAxisHit(vm.Ray ray, vm.Vector3 axis) {
+  //   final n = ray.direction - axis * ray.direction.dot(axis);
+  //   final d = ray.direction.dot(n);
+  //   final t = d.abs() < 1e-6 ? 0.0 : -ray.origin.dot(n) / d;
+  //   return ray.origin + ray.direction * t;
+  // }
+
+  vm.Vector3 rayPlaneHit(vm.Ray ray, vm.Vector3 point, vm.Vector3 normal) {
+    final d = ray.direction.dot(normal);
+    final t = d.abs() < 1e-6 ? 0.0 : (point - ray.origin).dot(normal) / d;
     return ray.origin + ray.direction * t;
   }
 
@@ -156,13 +162,17 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               currentAxis_ = ManipulationAxis.x;
             } else if (hitNode.name.endsWith("_y")) {
               currentAxis_ = ManipulationAxis.y;
-            } else {
+            } else if (hitNode.name.endsWith("_z")) {
               currentAxis_ = ManipulationAxis.z;
+            } else {
+              activeNode_ = hitNode.parent!;
             }
           }
         }
       },
       onPanUpdate: (details) {
+        if (activeNode_ == null) return;
+
         final currRay = widget.camera.screenPointToRay(
           details.localPosition,
           Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
@@ -172,69 +182,71 @@ class _ManipulatableViewState extends State<ManipulatableView> {
           details.localPosition - details.delta,
           Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
         );
-        // final hit = widget.child.scene!.raycast(currRay);
-
-        // if (hit != null) {
-        //   // scene.Node hitNode;
-
-        //   // if (hit.node.parent!.name.contains("gizmo") ||
-        //   //     hit.node.parent!.parent!.name.contains("gizmo")) {
-        //   //   if (hit.node.name.endsWith("_shaft") ||
-        //   //       hit.node.name.endsWith("_tip")) {
-        //   //     hitNode = hit.node.parent!;
-        //   //   } else {
-        //   //     hitNode = hit.node;
-        //   //   }
-
-        //   //   ManipulationAxis axis;
-
-        //   //   if (hitNode.name.endsWith("_x")) {
-        //   //     axis = ManipulationAxis.x;
-        //   //   } else if (hitNode.name.endsWith("_y")) {
-        //   //     axis = ManipulationAxis.y;
-        //   //   } else {
-        //   //     axis = ManipulationAxis.z;
-        //   //   }
-
-        // print(axis);
 
         final axisVec = switch (currentAxis_) {
           ManipulationAxis.x => vm.Vector3(1, 0, 0),
           ManipulationAxis.y => vm.Vector3(0, 1, 0),
           ManipulationAxis.z => vm.Vector3(0, 0, 1),
+          null => vm.Vector3(0, 0, 0),
         };
 
-        final currLocation = rayAxisHit(currRay, axisVec);
-        final prevLocation = rayAxisHit(prevRay, axisVec);
+        final currLocation = currentOption_ != ManipulationOptions.freedrag
+            ? rayPlaneHit(
+                currRay,
+                vm.Vector3.zero(),
+                currRay.direction - axisVec * currRay.direction.dot(axisVec),
+              )
+            : rayPlaneHit(
+                currRay,
+                activeNode_!.globalTransform.getTranslation(),
+                (widget.camera.position -
+                        activeNode_!.globalTransform.getTranslation())
+                    .normalized(),
+              );
+        final prevLocation = currentOption_ != ManipulationOptions.freedrag
+            ? rayPlaneHit(
+                prevRay,
+                vm.Vector3.zero(),
+                prevRay.direction - axisVec * prevRay.direction.dot(axisVec),
+              )
+            : rayPlaneHit(
+                prevRay,
+                activeNode_!.globalTransform.getTranslation(),
+                (widget.camera.position -
+                        activeNode_!.globalTransform.getTranslation())
+                    .normalized(),
+              );
 
         switch (currentOption_) {
           case ManipulationOptions.translatable:
-            (activeNode_.getChildByName(
-              "${activeNode_.name}_translation_gizmo",
+            (activeNode_!.getChildByName(
+              "${activeNode_!.name}_translation_gizmo",
             ) as TranslationGizmo).manipulate(
-              currentAxis_,
-              (currLocation - prevLocation).dot(axisVec),
+              currentAxis_!,
+              (currLocation - prevLocation).dot(axisVec!),
             );
           case ManipulationOptions.rotatable:
-            (activeNode_.getChildByName(
-              "${activeNode_.name}_rotation_gizmo",
+            (activeNode_!.getChildByName(
+              "${activeNode_!.name}_rotation_gizmo",
             ) as RotationGizmo).manipulate(
-              currentAxis_,
+              currentAxis_!,
               atan2(
-                currLocation.cross(prevLocation).dot(axisVec),
+                currLocation.cross(prevLocation).dot(axisVec!),
                 currLocation.dot(prevLocation),
               ),
             );
           case ManipulationOptions.scalable:
-            (activeNode_.getChildByName(
-              "${activeNode_.name}_scale_gizmo",
+            (activeNode_!.getChildByName(
+              "${activeNode_!.name}_scale_gizmo",
             ) as ScaleGizmo).manipulate(
-              currentAxis_,
-              (currLocation - prevLocation).dot(axisVec),
+              currentAxis_!,
+              (currLocation - prevLocation).dot(axisVec!),
             );
           case ManipulationOptions.freedrag:
-            // TODO: Handle this case.
-            throw UnimplementedError();
+            print("free dragging");
+            activeNode_!.mutateLocalTransform((matrix) {
+              matrix.translateByVector3(currLocation - prevLocation);
+            });
         }
       },
       child: widget.child,
@@ -541,7 +553,9 @@ base class ScaleGizmo extends Gizmo {
 
   @override
   manipulate(ManipulationAxis axis, double delta) {
-    parent?.getChildByName("${parent?.name}_mesh")?.mutateLocalTransform((matrix) {
+    parent?.getChildByName("${parent?.name}_mesh")?.mutateLocalTransform((
+      matrix,
+    ) {
       switch (axis) {
         case ManipulationAxis.x:
           matrix.scaleByVector3(vm.Vector3(1.0 - delta, 1.0, 1.0));
