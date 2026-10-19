@@ -80,16 +80,79 @@ base class ManipulatableNode extends scene.Node {
   }
 }
 
+class ManipulationControls extends StatefulWidget {
+  final Set<ManipulationOptions> options_;
+
+  final ValueChanged<ManipulationOptions>? onChanged;
+
+  const ManipulationControls({
+    super.key,
+    Set<ManipulationOptions> options = const {
+      ManipulationOptions.freedrag,
+      ManipulationOptions.rotatable,
+      ManipulationOptions.scalable,
+      ManipulationOptions.translatable,
+    },
+    required this.onChanged,
+  }) : options_ = options;
+
+  @override
+  State<ManipulationControls> createState() => _ManipulationControlsState();
+}
+
+class _ManipulationControlsState extends State<ManipulationControls> {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  final List<bool> _selectedOption = <bool>[true, false, false, false];
+
+  ManipulationOptions getSelectedManipulationOption() {
+    return ManipulationOptions.values[_selectedOption.indexWhere((i) => true)];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ToggleButtons(
+      selectedColor: Colors.white,
+      fillColor: Colors.blue[200],
+      color: Colors.blue[400],
+      borderRadius: const .all(Radius.circular(8)),
+      direction: Axis.horizontal,
+      isSelected: _selectedOption,
+      onPressed: (index) {
+        setState(() {
+          // The button that is tapped is set to true, and the others to false.
+          for (int i = 0; i < _selectedOption.length; i++) {
+            _selectedOption[i] = i == index;
+          }
+        });
+        widget.onChanged?.call(getSelectedManipulationOption());
+      },
+      children: <Widget>[
+        Icon(Icons.open_with),
+        Icon(ManipulationIcons.translateicon),
+        Icon(ManipulationIcons.rotateicon),
+        Icon(ManipulationIcons.scaleicon),
+      ],
+    );
+  }
+}
+
 class ManipulatableView extends StatefulWidget {
   final scene.Camera camera;
   final BoxConstraints constraints;
   final scene.SceneView child;
+
+  final ManipulationOptions currentOption;
 
   const ManipulatableView({
     super.key,
     required this.camera,
     required this.constraints,
     required this.child,
+    this.currentOption = ManipulationOptions.freedrag,
   });
 
   @override
@@ -98,23 +161,16 @@ class ManipulatableView extends StatefulWidget {
 
 class _ManipulatableViewState extends State<ManipulatableView> {
   scene.Node? activeNode_;
-  ManipulationOptions currentOption_ = ManipulationOptions.freedrag;
+  // ManipulationOptions currentOption_ = ManipulationOptions.freedrag;
   ManipulationAxis? currentAxis_;
 
-  void setManipulationOption(ManipulationOptions option) =>
-      currentOption_ = option;
+  // void setManipulationOption(ManipulationOptions option) =>
+  //     currentOption_ = option;
 
   @override
   void initState() {
     super.initState();
   }
-
-  // vm.Vector3 rayAxisHit(vm.Ray ray, vm.Vector3 axis) {
-  //   final n = ray.direction - axis * ray.direction.dot(axis);
-  //   final d = ray.direction.dot(n);
-  //   final t = d.abs() < 1e-6 ? 0.0 : -ray.origin.dot(n) / d;
-  //   return ray.origin + ray.direction * t;
-  // }
 
   vm.Vector3 rayPlaneHit(vm.Ray ray, vm.Vector3 point, vm.Vector3 normal) {
     final d = ray.direction.dot(normal);
@@ -135,7 +191,9 @@ class _ManipulatableViewState extends State<ManipulatableView> {
 
         if (hit != null && hit.node.parent is ManipulatableNode) {
           activeNode_ = hit.node.parent!;
-          (activeNode_ as ManipulatableNode).toggleManipulation(currentOption_);
+          (activeNode_ as ManipulatableNode).toggleManipulation(
+            widget.currentOption,
+          );
         }
       },
       onPanStart: (details) {
@@ -190,7 +248,8 @@ class _ManipulatableViewState extends State<ManipulatableView> {
           null => vm.Vector3(0, 0, 0),
         };
 
-        final currLocation = currentOption_ != ManipulationOptions.freedrag
+        final currLocation =
+            widget.currentOption != ManipulationOptions.freedrag
             ? rayPlaneHit(
                 currRay,
                 vm.Vector3.zero(),
@@ -203,7 +262,8 @@ class _ManipulatableViewState extends State<ManipulatableView> {
                         activeNode_!.globalTransform.getTranslation())
                     .normalized(),
               );
-        final prevLocation = currentOption_ != ManipulationOptions.freedrag
+        final prevLocation =
+            widget.currentOption != ManipulationOptions.freedrag
             ? rayPlaneHit(
                 prevRay,
                 vm.Vector3.zero(),
@@ -217,7 +277,7 @@ class _ManipulatableViewState extends State<ManipulatableView> {
                     .normalized(),
               );
 
-        switch (currentOption_) {
+        switch (widget.currentOption) {
           case ManipulationOptions.translatable:
             (activeNode_!.getChildByName(
               "${activeNode_!.name}_translation_gizmo",
@@ -243,29 +303,19 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               (currLocation - prevLocation).dot(axisVec!),
             );
           case ManipulationOptions.freedrag:
-            print("free dragging");
-            activeNode_!.mutateLocalTransform((matrix) {
-              matrix.translateByVector3(currLocation - prevLocation);
-            });
+            if ((activeNode_ as ManipulatableNode).manipulationOptions.contains(
+              ManipulationOptions.freedrag,
+            )) {
+              activeNode_!.mutateLocalTransform((matrix) {
+                matrix.translateByVector3(currLocation - prevLocation);
+              });
+            }
         }
       },
       child: widget.child,
     );
   }
 }
-
-// @override
-// GestureDragStartCallback? get onPanStart {
-//   super.onPanStart;
-//   return (details) {
-
-// }
-
-// @override
-// GestureDragUpdateCallback? get onPanUpdate {
-//   super.onPanUpdate;
-//   return (details) {};
-// }
 
 abstract base class Gizmo extends scene.Node {
   final GizmoStyle style;

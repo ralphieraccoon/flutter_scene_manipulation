@@ -26,6 +26,8 @@ class _CubeViewState extends State<CubeView> {
       OrbitCameraController(target: vm.Vector3.zero(), distance: 8),
     );
 
+  ManipulationOptions currentOption_ = ManipulationOptions.freedrag;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +39,7 @@ class _CubeViewState extends State<CubeView> {
     scene.add(
       ManipulatableNode(
         options: {
+          ManipulationOptions.freedrag,
           ManipulationOptions.scalable,
           ManipulationOptions.rotatable,
           ManipulationOptions.translatable,
@@ -53,48 +56,65 @@ class _CubeViewState extends State<CubeView> {
   @override
   Widget build(BuildContext context) {
     final cameraController = camera.getComponent<OrbitCameraController>()!;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Listener(
-          onPointerMove: (event) {
-            if (event.kind == PointerDeviceKind.mouse &&
-                event.buttons == kSecondaryMouseButton) {
-              const double cameraSpeed = 0.007;
-              setState(() {
-                cameraController.orbitBy(
-                  event.delta.dx * cameraSpeed,
-                  -event.delta.dy * cameraSpeed,
-                );
-              });
-            } else if (event.kind == PointerDeviceKind.mouse &&
-                event.buttons == kMiddleMouseButton) {
-              const double panSpeed = 0.005;
-              setState(() {
-                cameraController.panBy(
-                  Offset(
-                    -event.delta.dx * panSpeed,
-                    event.delta.dy * panSpeed, // Inverted to follow natural hand dragging directions
-                  ),
-                );
-              });
-            }
-          },
-          onPointerSignal: (event) {
-            if (event is PointerScrollEvent) {
-              const double zoomSpeed = 0.005;
+    return Stack(
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return Listener(
+              onPointerMove: (event) {
+                if (event.kind == PointerDeviceKind.mouse &&
+                    event.buttons == kSecondaryMouseButton) {
+                  const double cameraSpeed = 0.007;
+                  setState(() {
+                    cameraController.orbitBy(
+                      event.delta.dx * cameraSpeed,
+                      -event.delta.dy * cameraSpeed,
+                    );
+                  });
+                } else if (event.kind == PointerDeviceKind.mouse &&
+                    event.buttons == kMiddleMouseButton) {
+                  const double panSpeed = 0.005;
+                  setState(() {
+                    cameraController.panBy(
+                      Offset(
+                        -event.delta.dx * panSpeed,
+                        event.delta.dy * panSpeed, // Inverted to follow natural hand dragging directions
+                      ),
+                    );
+                  });
+                }
+              },
+              onPointerSignal: (event) {
+                if (event is PointerScrollEvent) {
+                  const double zoomSpeed = 0.005;
 
-              setState(() {
-                cameraController.dollyBy(event.scrollDelta.dy * zoomSpeed);
-              });
-            }
+                  setState(() {
+                    cameraController.dollyBy(event.scrollDelta.dy * zoomSpeed);
+                  });
+                }
+              },
+              child: ManipulatableView(
+                camera: camera.getComponent<CameraComponent>()!.toCamera(),
+                constraints: constraints,
+                currentOption: currentOption_,
+                child: SceneView(scene),
+              ),
+            );
           },
-          child: ManipulatableView(
-            camera: camera.getComponent<CameraComponent>()!.toCamera(),
-            constraints: constraints,
-            child: SceneView(scene),
+        ),
+        Container(
+          alignment: AlignmentGeometry.bottomRight,
+          padding: .all(8),
+          child: ManipulationControls(
+            options: ManipulationOptions.values.toSet(),
+            onChanged: (value) {
+              setState(() {
+                currentOption_ = value;
+              });
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
