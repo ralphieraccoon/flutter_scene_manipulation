@@ -13,7 +13,7 @@ class ManipulationIcons {
   ManipulationIcons._();
 
   static const _kFontFam = 'ManipulationIcons';
-  static const String? _kFontPkg = null;
+  static const String? _kFontPkg = 'flutter_scene_manipulation';
 
   static const IconData rotateicon = IconData(
     0xe800,
@@ -53,30 +53,14 @@ base class ManipulatableNode extends scene.Node {
     ]);
   }
 
-  void toggleManipulation(ManipulationOptions option) {
-    if (manipulationOptions.contains(option)) {
-      switch (option) {
-        case ManipulationOptions.translatable:
-          getChildByName("${name}_translation_gizmo")!
-              .visible = !getChildByName("${name}_translation_gizmo")!
-              .visible;
-          getChildByName("${name}_rotation_gizmo")!.visible = false;
-          getChildByName("${name}_scale_gizmo")!.visible = false;
-        case ManipulationOptions.rotatable:
-          getChildByName("${name}_translation_gizmo")!.visible = false;
-          getChildByName("${name}_rotation_gizmo")!
-              .visible = !getChildByName("${name}_rotation_gizmo")!
-              .visible;
-          getChildByName("${name}_scale_gizmo")!.visible = false;
-        case ManipulationOptions.scalable:
-          getChildByName("${name}_translation_gizmo")!.visible = false;
-          getChildByName("${name}_rotation_gizmo")!.visible = false;
-          getChildByName("${name}_scale_gizmo")!
-              .visible = !getChildByName("${name}_scale_gizmo")!
-              .visible;
-        default:
-      }
-    }
+  void setManipulation(ManipulationOptions option) {
+    if (!manipulationOptions.contains(option)) return;
+    getChildByName("${name}_translation_gizmo")!.visible =
+        option == ManipulationOptions.translatable;
+    getChildByName("${name}_rotation_gizmo")!.visible =
+        option == ManipulationOptions.rotatable;
+    getChildByName("${name}_scale_gizmo")!.visible =
+        option == ManipulationOptions.scalable;
   }
 }
 
@@ -106,11 +90,14 @@ class _ManipulationControlsState extends State<ManipulationControls> {
     super.initState();
   }
 
-  final List<bool> _selectedOption = <bool>[true, false, false, false];
+  static const List<(ManipulationOptions, IconData)> buttons_ = [
+    (ManipulationOptions.freedrag, Icons.open_with),
+    (ManipulationOptions.translatable, ManipulationIcons.translateicon),
+    (ManipulationOptions.rotatable, ManipulationIcons.rotateicon),
+    (ManipulationOptions.scalable, ManipulationIcons.scaleicon),
+  ];
 
-  ManipulationOptions getSelectedManipulationOption() {
-    return ManipulationOptions.values[_selectedOption.indexWhere((i) => true)];
-  }
+  ManipulationOptions _selected = ManipulationOptions.freedrag;
 
   @override
   Widget build(BuildContext context) {
@@ -120,15 +107,10 @@ class _ManipulationControlsState extends State<ManipulationControls> {
       color: Colors.blue[400],
       borderRadius: const .all(Radius.circular(8)),
       direction: Axis.horizontal,
-      isSelected: _selectedOption,
+      isSelected: [for (final (option, _) in buttons_) option == _selected],
       onPressed: (index) {
-        setState(() {
-          // The button that is tapped is set to true, and the others to false.
-          for (int i = 0; i < _selectedOption.length; i++) {
-            _selectedOption[i] = i == index;
-          }
-        });
-        widget.onChanged?.call(getSelectedManipulationOption());
+        setState(() => _selected = buttons_[index].$1);
+        widget.onChanged?.call(_selected);
       },
       children: <Widget>[
         Icon(Icons.open_with),
@@ -172,6 +154,15 @@ class _ManipulatableViewState extends State<ManipulatableView> {
     super.initState();
   }
 
+  @override
+  void didUpdateWidget(covariant ManipulatableView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentOption != oldWidget.currentOption &&
+        activeNode_ != null) {
+      (activeNode_! as ManipulatableNode).setManipulation(widget.currentOption);
+    }
+  }
+
   vm.Vector3 rayPlaneHit(vm.Ray ray, vm.Vector3 point, vm.Vector3 normal) {
     final d = ray.direction.dot(normal);
     final t = d.abs() < 1e-6 ? 0.0 : (point - ray.origin).dot(normal) / d;
@@ -191,7 +182,7 @@ class _ManipulatableViewState extends State<ManipulatableView> {
 
         if (hit != null && hit.node.parent is ManipulatableNode) {
           activeNode_ = hit.node.parent!;
-          (activeNode_ as ManipulatableNode).toggleManipulation(
+          (activeNode_ as ManipulatableNode).setManipulation(
             widget.currentOption,
           );
         }
