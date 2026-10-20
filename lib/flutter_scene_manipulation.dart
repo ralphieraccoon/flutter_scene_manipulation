@@ -146,6 +146,7 @@ class _ManipulatableViewState extends State<ManipulatableView> {
   // ManipulationOptions currentOption_ = ManipulationOptions.freedrag;
   ManipulationAxis? currentAxis_;
   vm.Vector3? dragAnchor_;
+  MouseCursor currentCursor_ = SystemMouseCursors.basic;
 
   // void setManipulationOption(ManipulationOptions option) =>
   //     currentOption_ = option;
@@ -181,8 +182,9 @@ class _ManipulatableViewState extends State<ManipulatableView> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (details) {
+    return MouseRegion(
+      cursor: currentCursor_,
+      onHover: (details) {
         final ray = widget.camera.screenPointToRay(
           details.localPosition,
           Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
@@ -190,144 +192,175 @@ class _ManipulatableViewState extends State<ManipulatableView> {
 
         final hit = widget.child.scene?.raycast(ray);
 
-        if (hit != null && hit.node.parent is ManipulatableNode) {
-          activeNode_ = hit.node.parent!;
-          (activeNode_ as ManipulatableNode).setManipulation(
-            widget.currentOption,
-          );
-        }
-      },
-      onPanStart: (details) {
-        final ray = widget.camera.screenPointToRay(
-          details.localPosition,
-          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
-        );
-
-        final hit = widget.child.scene!.raycast(ray);
-
-        if (hit != null) {
-          if (hit.node.parent!.name.contains("gizmo") ||
-              hit.node.parent!.parent!.name.contains("gizmo")) {
-            scene.Node hitNode;
-
-            if (hit.node.name.endsWith("_shaft") ||
-                hit.node.name.endsWith("_tip")) {
-              hitNode = hit.node.parent!;
+        setState(() {
+          if (hit != null) {
+            if (widget.currentOption == ManipulationOptions.freedrag) {
+              currentCursor_ = SystemMouseCursors.move;
+            } else if (hit.node.name.contains(RegExp(r'_[xyz]'))) {
+              currentCursor_ = SystemMouseCursors.click;
             } else {
-              hitNode = hit.node;
-            }
-
-            if (hitNode.name.endsWith("_x")) {
-              currentAxis_ = ManipulationAxis.x;
-            } else if (hitNode.name.endsWith("_y")) {
-              currentAxis_ = ManipulationAxis.y;
-            } else {
-              currentAxis_ = ManipulationAxis.z;
+              currentCursor_ = SystemMouseCursors.basic;
             }
           } else {
-            activeNode_ = hit.node.parent;
+            currentCursor_ = SystemMouseCursors.basic;
+          }
+        });
+      },
+      child: GestureDetector(
+        onTapDown: (details) {
+          final ray = widget.camera.screenPointToRay(
+            details.localPosition,
+            Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+          );
+
+          final hit = widget.child.scene?.raycast(ray);
+
+          if (hit != null && hit.node.parent is ManipulatableNode) {
+            activeNode_ = hit.node.parent!;
+            (activeNode_ as ManipulatableNode).setManipulation(
+              widget.currentOption,
+            );
+          }
+        },
+        onPanStart: (details) {
+          final ray = widget.camera.screenPointToRay(
+            details.localPosition,
+            Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+          );
+
+          final hit = widget.child.scene!.raycast(ray);
+
+          if (hit != null) {
+            if (hit.node.parent!.name.contains("gizmo") ||
+                hit.node.parent!.parent!.name.contains("gizmo")) {
+              scene.Node hitNode;
+
+              if (hit.node.name.endsWith("_shaft") ||
+                  hit.node.name.endsWith("_tip")) {
+                hitNode = hit.node.parent!;
+              } else {
+                hitNode = hit.node;
+              }
+
+              if (hitNode.name.endsWith("_x")) {
+                currentAxis_ = ManipulationAxis.x;
+              } else if (hitNode.name.endsWith("_y")) {
+                currentAxis_ = ManipulationAxis.y;
+              } else {
+                currentAxis_ = ManipulationAxis.z;
+              }
+            } else {
+              activeNode_ = hit.node.parent;
+            }
+
+            dragAnchor_ = activeNode_?.globalTransform.getTranslation();
+          }
+        },
+        onPanUpdate: (details) {
+          if (activeNode_ == null) return;
+
+          final currRay = widget.camera.screenPointToRay(
+            details.localPosition,
+            Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+          );
+
+          final prevRay = widget.camera.screenPointToRay(
+            details.localPosition - details.delta,
+            Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
+          );
+
+          final axisVec = switch (currentAxis_) {
+            ManipulationAxis.x => _worldAxisDirection(activeNode_!, 0),
+            ManipulationAxis.y => _worldAxisDirection(activeNode_!, 1),
+            ManipulationAxis.z => _worldAxisDirection(activeNode_!, 2),
+            null => vm.Vector3(0, 0, 0),
+          };
+
+          if (activeNode_ == null ||
+              dragAnchor_ == null ||
+              (widget.currentOption != ManipulationOptions.freedrag &&
+                      widget.currentOption == ManipulationOptions.rotatable
+                  ? currRay.direction.normalized().dot(axisVec).abs() < 0.02
+                  : currRay.direction.normalized().dot(axisVec).abs() > 0.98)) {
+            return;
           }
 
-          dragAnchor_ = activeNode_?.globalTransform.getTranslation();
-        }
-                
-      },
-      onPanUpdate: (details) {
-        if (activeNode_ == null) return;
+          // final planeNormal = widget.currentOption == ManipulationOptions.freedrag
+          //     ? (widget.camera.position - dragAnchor_!).normalized()
+          //     : axisVec;
 
-        final currRay = widget.camera.screenPointToRay(
-          details.localPosition,
-          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
-        );
+          final vm.Vector3 planeNormal;
+          switch (widget.currentOption) {
+            case ManipulationOptions.freedrag:
+              planeNormal = (widget.camera.position - dragAnchor_!)
+                  .normalized();
+            case ManipulationOptions.rotatable:
+              planeNormal = axisVec; // ring's own plane — unchanged, keep it
+            default:
+              planeNormal =
+                  ((widget.camera.position - dragAnchor_!) -
+                          axisVec *
+                              (widget.camera.position - dragAnchor_!).dot(
+                                axisVec,
+                              ))
+                      .normalized();
+          }
 
-        final prevRay = widget.camera.screenPointToRay(
-          details.localPosition - details.delta,
-          Size(widget.constraints.maxWidth, widget.constraints.maxHeight),
-        );
+          final currLocation = rayPlaneHit(currRay, dragAnchor_!, planeNormal);
+          final prevLocation = rayPlaneHit(prevRay, dragAnchor_!, planeNormal);
 
-        final axisVec = switch (currentAxis_) {
-          ManipulationAxis.x => _worldAxisDirection(activeNode_!, 0),
-          ManipulationAxis.y => _worldAxisDirection(activeNode_!, 1),
-          ManipulationAxis.z => _worldAxisDirection(activeNode_!, 2),
-          null => vm.Vector3(0, 0, 0),
-        };
-
-        if (activeNode_ == null ||
-            dragAnchor_ == null ||
-            (widget.currentOption != ManipulationOptions.freedrag &&
-                    widget.currentOption == ManipulationOptions.rotatable
-                ? currRay.direction.normalized().dot(axisVec).abs() < 0.02
-                : currRay.direction.normalized().dot(axisVec).abs() > 0.98)) {
-          return;
-        }
-
-        // final planeNormal = widget.currentOption == ManipulationOptions.freedrag
-        //     ? (widget.camera.position - dragAnchor_!).normalized()
-        //     : axisVec;
-
-        final vm.Vector3 planeNormal;
-        switch (widget.currentOption) {
-          case ManipulationOptions.freedrag:
-            planeNormal = (widget.camera.position - dragAnchor_!).normalized();
-          case ManipulationOptions.rotatable:
-            planeNormal = axisVec; // ring's own plane — unchanged, keep it
-          default:
-            planeNormal =
-                ((widget.camera.position - dragAnchor_!) -
-                        axisVec *
-                            (widget.camera.position - dragAnchor_!).dot(
-                              axisVec,
-                            ))
-                    .normalized();
-        }
-
-        final currLocation = rayPlaneHit(currRay, dragAnchor_!, planeNormal);
-        final prevLocation = rayPlaneHit(prevRay, dragAnchor_!, planeNormal);
-
-        switch (widget.currentOption) {
-          case ManipulationOptions.translatable:
-            (activeNode_!.getChildByName(
-              "${activeNode_!.name}_translation_gizmo",
-            ) as TranslationGizmo).manipulate(
-              currentAxis_!,
-              (currLocation - prevLocation).dot(axisVec),
-            );
-          case ManipulationOptions.rotatable:
-            (activeNode_!.getChildByName(
-              "${activeNode_!.name}_rotation_gizmo",
-            ) as RotationGizmo).manipulate(
-              currentAxis_!,
-              atan2(
-                (prevLocation - dragAnchor_!)
-                    .cross(currLocation - dragAnchor_!)
-                    .dot(axisVec),
-                (currLocation - dragAnchor_!).dot(prevLocation - dragAnchor_!),
-              ),
-            );
-          case ManipulationOptions.scalable:
-            (activeNode_!.getChildByName(
-              "${activeNode_!.name}_scale_gizmo",
-            ) as ScaleGizmo).manipulate(
-              currentAxis_!,
-              (currLocation - prevLocation).dot(axisVec),
-            );
-          case ManipulationOptions.freedrag:
-            if ((activeNode_! as ManipulatableNode).manipulationOptions
-                .contains(ManipulationOptions.freedrag)) {
-              final worldDelta = currLocation - prevLocation;
-              final localDelta =
-                  vm.Matrix4.inverted(activeNode_!.globalTransform)
-                      .transform(
-                        vm.Vector4(worldDelta.x, worldDelta.y, worldDelta.z, 0),
-                      )
-                      .xyz;
-              activeNode_!.mutateLocalTransform((matrix) {
-                matrix.translateByVector3(localDelta);
-              });
-            }
-        }
-      },
-      child: widget.child,
+          switch (widget.currentOption) {
+            case ManipulationOptions.translatable:
+              (activeNode_!.getChildByName(
+                "${activeNode_!.name}_translation_gizmo",
+              ) as TranslationGizmo).manipulate(
+                currentAxis_!,
+                (currLocation - prevLocation).dot(axisVec),
+              );
+            case ManipulationOptions.rotatable:
+              (activeNode_!.getChildByName(
+                "${activeNode_!.name}_rotation_gizmo",
+              ) as RotationGizmo).manipulate(
+                currentAxis_!,
+                atan2(
+                  (prevLocation - dragAnchor_!)
+                      .cross(currLocation - dragAnchor_!)
+                      .dot(axisVec),
+                  (currLocation - dragAnchor_!).dot(
+                    prevLocation - dragAnchor_!,
+                  ),
+                ),
+              );
+            case ManipulationOptions.scalable:
+              (activeNode_!.getChildByName(
+                "${activeNode_!.name}_scale_gizmo",
+              ) as ScaleGizmo).manipulate(
+                currentAxis_!,
+                (currLocation - prevLocation).dot(axisVec),
+              );
+            case ManipulationOptions.freedrag:
+              if ((activeNode_! as ManipulatableNode).manipulationOptions
+                  .contains(ManipulationOptions.freedrag)) {
+                final worldDelta = currLocation - prevLocation;
+                final localDelta =
+                    vm.Matrix4.inverted(activeNode_!.globalTransform)
+                        .transform(
+                          vm.Vector4(
+                            worldDelta.x,
+                            worldDelta.y,
+                            worldDelta.z,
+                            0,
+                          ),
+                        )
+                        .xyz;
+                activeNode_!.mutateLocalTransform((matrix) {
+                  matrix.translateByVector3(localDelta);
+                });
+              }
+          }
+        },
+        child: widget.child,
+      ),
     );
   }
 }
