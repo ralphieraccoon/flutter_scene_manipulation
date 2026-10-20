@@ -13,7 +13,7 @@ class ManipulationIcons {
   ManipulationIcons._();
 
   static const _kFontFam = 'ManipulationIcons';
-  static const String? _kFontPkg = 'flutter_scene_manipulation';
+  static const String _kFontPkg = 'flutter_scene_manipulation';
 
   static const IconData rotateicon = IconData(
     0xe800,
@@ -145,6 +145,7 @@ class _ManipulatableViewState extends State<ManipulatableView> {
   scene.Node? activeNode_;
   // ManipulationOptions currentOption_ = ManipulationOptions.freedrag;
   ManipulationAxis? currentAxis_;
+  vm.Vector3? dragAnchor_;
 
   // void setManipulationOption(ManipulationOptions option) =>
   //     currentOption_ = option;
@@ -167,6 +168,15 @@ class _ManipulatableViewState extends State<ManipulatableView> {
     final d = ray.direction.dot(normal);
     final t = d.abs() < 1e-6 ? 0.0 : (point - ray.origin).dot(normal) / d;
     return ray.origin + ray.direction * t;
+  }
+
+  vm.Vector3 _worldAxisDirection(scene.Node node, int axis) {
+    final t = node.globalTransform;
+    return vm.Vector3(
+      t.entry(0, axis),
+      t.entry(1, axis),
+      t.entry(2, axis),
+    ).normalized();
   }
 
   @override
@@ -196,10 +206,10 @@ class _ManipulatableViewState extends State<ManipulatableView> {
         final hit = widget.child.scene!.raycast(ray);
 
         if (hit != null) {
-          scene.Node hitNode;
-
           if (hit.node.parent!.name.contains("gizmo") ||
               hit.node.parent!.parent!.name.contains("gizmo")) {
+            scene.Node hitNode;
+
             if (hit.node.name.endsWith("_shaft") ||
                 hit.node.name.endsWith("_tip")) {
               hitNode = hit.node.parent!;
@@ -211,13 +221,16 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               currentAxis_ = ManipulationAxis.x;
             } else if (hitNode.name.endsWith("_y")) {
               currentAxis_ = ManipulationAxis.y;
-            } else if (hitNode.name.endsWith("_z")) {
-              currentAxis_ = ManipulationAxis.z;
             } else {
-              activeNode_ = hitNode.parent!;
+              currentAxis_ = ManipulationAxis.z;
             }
+          } else {
+            activeNode_ = hit.node.parent;
           }
+
+          dragAnchor_ = activeNode_?.globalTransform.getTranslation();
         }
+                
       },
       onPanUpdate: (details) {
         if (activeNode_ == null) return;
@@ -233,40 +246,43 @@ class _ManipulatableViewState extends State<ManipulatableView> {
         );
 
         final axisVec = switch (currentAxis_) {
-          ManipulationAxis.x => vm.Vector3(1, 0, 0),
-          ManipulationAxis.y => vm.Vector3(0, 1, 0),
-          ManipulationAxis.z => vm.Vector3(0, 0, 1),
+          ManipulationAxis.x => _worldAxisDirection(activeNode_!, 0),
+          ManipulationAxis.y => _worldAxisDirection(activeNode_!, 1),
+          ManipulationAxis.z => _worldAxisDirection(activeNode_!, 2),
           null => vm.Vector3(0, 0, 0),
         };
 
-        final currLocation =
-            widget.currentOption != ManipulationOptions.freedrag
-            ? rayPlaneHit(
-                currRay,
-                vm.Vector3.zero(),
-                currRay.direction - axisVec * currRay.direction.dot(axisVec),
-              )
-            : rayPlaneHit(
-                currRay,
-                activeNode_!.globalTransform.getTranslation(),
-                (widget.camera.position -
-                        activeNode_!.globalTransform.getTranslation())
-                    .normalized(),
-              );
-        final prevLocation =
-            widget.currentOption != ManipulationOptions.freedrag
-            ? rayPlaneHit(
-                prevRay,
-                vm.Vector3.zero(),
-                prevRay.direction - axisVec * prevRay.direction.dot(axisVec),
-              )
-            : rayPlaneHit(
-                prevRay,
-                activeNode_!.globalTransform.getTranslation(),
-                (widget.camera.position -
-                        activeNode_!.globalTransform.getTranslation())
-                    .normalized(),
-              );
+        if (activeNode_ == null ||
+            dragAnchor_ == null ||
+            (widget.currentOption != ManipulationOptions.freedrag &&
+                    widget.currentOption == ManipulationOptions.rotatable
+                ? currRay.direction.normalized().dot(axisVec).abs() < 0.02
+                : currRay.direction.normalized().dot(axisVec).abs() > 0.98)) {
+          return;
+        }
+
+        // final planeNormal = widget.currentOption == ManipulationOptions.freedrag
+        //     ? (widget.camera.position - dragAnchor_!).normalized()
+        //     : axisVec;
+
+        final vm.Vector3 planeNormal;
+        switch (widget.currentOption) {
+          case ManipulationOptions.freedrag:
+            planeNormal = (widget.camera.position - dragAnchor_!).normalized();
+          case ManipulationOptions.rotatable:
+            planeNormal = axisVec; // ring's own plane — unchanged, keep it
+          default:
+            planeNormal =
+                ((widget.camera.position - dragAnchor_!) -
+                        axisVec *
+                            (widget.camera.position - dragAnchor_!).dot(
+                              axisVec,
+                            ))
+                    .normalized();
+        }
+
+        final currLocation = rayPlaneHit(currRay, dragAnchor_!, planeNormal);
+        final prevLocation = rayPlaneHit(prevRay, dragAnchor_!, planeNormal);
 
         switch (widget.currentOption) {
           case ManipulationOptions.translatable:
@@ -274,7 +290,7 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               "${activeNode_!.name}_translation_gizmo",
             ) as TranslationGizmo).manipulate(
               currentAxis_!,
-              (currLocation - prevLocation).dot(axisVec!),
+              (currLocation - prevLocation).dot(axisVec),
             );
           case ManipulationOptions.rotatable:
             (activeNode_!.getChildByName(
@@ -282,8 +298,10 @@ class _ManipulatableViewState extends State<ManipulatableView> {
             ) as RotationGizmo).manipulate(
               currentAxis_!,
               atan2(
-                currLocation.cross(prevLocation).dot(axisVec!),
-                currLocation.dot(prevLocation),
+                (prevLocation - dragAnchor_!)
+                    .cross(currLocation - dragAnchor_!)
+                    .dot(axisVec),
+                (currLocation - dragAnchor_!).dot(prevLocation - dragAnchor_!),
               ),
             );
           case ManipulationOptions.scalable:
@@ -291,14 +309,20 @@ class _ManipulatableViewState extends State<ManipulatableView> {
               "${activeNode_!.name}_scale_gizmo",
             ) as ScaleGizmo).manipulate(
               currentAxis_!,
-              (currLocation - prevLocation).dot(axisVec!),
+              (currLocation - prevLocation).dot(axisVec),
             );
           case ManipulationOptions.freedrag:
-            if ((activeNode_ as ManipulatableNode).manipulationOptions.contains(
-              ManipulationOptions.freedrag,
-            )) {
+            if ((activeNode_! as ManipulatableNode).manipulationOptions
+                .contains(ManipulationOptions.freedrag)) {
+              final worldDelta = currLocation - prevLocation;
+              final localDelta =
+                  vm.Matrix4.inverted(activeNode_!.globalTransform)
+                      .transform(
+                        vm.Vector4(worldDelta.x, worldDelta.y, worldDelta.z, 0),
+                      )
+                      .xyz;
               activeNode_!.mutateLocalTransform((matrix) {
-                matrix.translateByVector3(currLocation - prevLocation);
+                matrix.translateByVector3(localDelta);
               });
             }
         }
@@ -412,7 +436,7 @@ base class TranslationGizmo extends Gizmo {
   TranslationGizmo(super.name, {super.scale, super.style}) {
     xAxis = _createArrow(
       "${name}_x",
-      vm.Matrix4.rotationZ(pi / 2),
+      vm.Matrix4.rotationZ(-pi / 2),
       super.gizmoScale,
       style.xMaterial,
     );
@@ -521,7 +545,7 @@ base class RotationGizmo extends Gizmo {
         case ManipulationAxis.y:
           matrix.rotateY(delta);
         case ManipulationAxis.z:
-          matrix.rotateZ(-delta);
+          matrix.rotateZ(delta);
       }
     });
   }
@@ -531,7 +555,7 @@ base class ScaleGizmo extends Gizmo {
   ScaleGizmo(super.name, {super.scale, super.style}) {
     xAxis = _createArrow(
       "${name}_x",
-      vm.Matrix4.rotationZ(pi / 2),
+      vm.Matrix4.rotationZ(-pi / 2),
       super.gizmoScale,
       style.xMaterial,
     );
@@ -599,7 +623,7 @@ base class ScaleGizmo extends Gizmo {
     ) {
       switch (axis) {
         case ManipulationAxis.x:
-          matrix.scaleByVector3(vm.Vector3(1.0 - delta, 1.0, 1.0));
+          matrix.scaleByVector3(vm.Vector3(1.0 + delta, 1.0, 1.0));
         case ManipulationAxis.y:
           matrix.scaleByVector3(vm.Vector3(1.0, 1.0 + delta, 1.0));
         case ManipulationAxis.z:

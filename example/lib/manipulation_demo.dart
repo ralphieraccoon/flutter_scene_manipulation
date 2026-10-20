@@ -1,9 +1,6 @@
-import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_scene/scene.dart';
 import 'package:vector_math/vector_math.dart' as vm;
 import 'package:flutter_scene_manipulation/flutter_scene_manipulation.dart';
@@ -32,9 +29,9 @@ class _CubeViewState extends State<CubeView> {
   void initState() {
     super.initState();
 
-    if (kIsWeb) {
-      BrowserContextMenu.disableContextMenu();
-    }
+    // if (kIsWeb) {
+    //   BrowserContextMenu.disableContextMenu();
+    // }
 
     scene.add(
       ManipulatableNode(
