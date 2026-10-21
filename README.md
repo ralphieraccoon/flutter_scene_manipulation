@@ -110,5 +110,5 @@ class _CubeViewState extends State<CubeView> {
 }
 ```
 
-for a more complete example see the [example](https://github.com/ralphieraccoon/flutter_scene_manipulation/tree/master/example/lib/main.dart) file.
+for a more complete example see the [example](https://pub.dev/packages/flutter_scene_manipulation/example) file.
 
