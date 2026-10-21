@@ -1,6 +1,6 @@
 name: flutter_scene_manipulation
 description: "An extension for flutter_scene that adds tools for translating, rotating and scaling induvidual nodes using manipulation gizmos."
-version: 0.0.2+b
+version: 0.0.2+c
 repository: https://github.com/ralphieraccoon/flutter_scene_manipulation
 homepage: https://github.com/ralphieraccoon/flutter_scene_manipulation
 topics:
