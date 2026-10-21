@@ -15,7 +15,7 @@ and the Flutter guide for
 
 An extension for [flutter_scene](https://pub.dev/packages/flutter_scene) that adds tools for translating, rotating and scaling induvidual nodes using manipulation gizmos.
 
-![Demo Video](./video/manipulation_demo.webp)
+![Demo Video](https://github.com/ralphieraccoon/flutter_scene_manipulation/blob/169cebf9282d3af9abbc311ba3279f7a7eea3d06/video/manipulation_demo.webp)
 
 ## Getting Started
 
