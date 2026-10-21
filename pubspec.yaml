@@ -1,7 +1,19 @@
 name: flutter_scene_manipulation
-description: "A new Flutter package project."
+description: "An extension for flutter_scene that adds tools for translating, rotating and scaling induvidual nodes using manipulation gizmos."
 version: 0.0.1
-homepage:
+repository: https://github.com/ralphieraccoon/flutter_scene_manipulation
+homepage: https://github.com/ralphieraccoon/flutter_scene_manipulation
+topics:
+  - flutter-gpu
+  - graphics
+  - cad
+platforms:
+  macos:
+  ios:
+  android:
+  windows:
+  linux:
+  web:
 
 environment:
   sdk: ^3.13.5
